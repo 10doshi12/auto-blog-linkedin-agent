@@ -9,12 +9,6 @@ headers = {
     "X-GitHub-Api-Version": "2026-03-10",
 }
 
-# for obj in r.json():
-#     print(obj["id"])
-#     print(obj["created_at"][:10])
-#     print(obj["name"])
-#     print("\n")
-
 def fetch_from_github(url:str)->object:
     r = httpx.get(url, headers=headers)
     return r
@@ -64,8 +58,8 @@ def data_to_send_LLM(owner:str) -> list:
     r = fetch_from_github(url=repos_url)
     new_repos_this_week = [
         repo for repo in r.json()
-        if "2025" in repo["created_at"] #no 2026 public repos so testng with past years data
-        # if was_created_this_week(repo["created_at"])
+        # if "2025" in repo["created_at"] #no 2026 public repos so testng with past years data
+        if was_created_this_week(repo["created_at"])
     ]
     
     to_process_repos = []
