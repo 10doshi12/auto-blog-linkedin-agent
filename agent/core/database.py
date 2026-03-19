@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -8,12 +7,15 @@ from supabase import create_client, Client
 
 from agent.config.settings import settings
 from agent.schemas.blog_post import BlogPostInsert
+from agent.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Table names
 # ---------------------------------------------------------------------------
 
-_BLOG_POSTS_TABLE = "blog_posts"
+_BLOG_POSTS_TABLE = "posts"
 _PROCESSED_REPOS_TABLE = "agent_processed_repos"
 
 # ---------------------------------------------------------------------------
@@ -21,6 +23,7 @@ _PROCESSED_REPOS_TABLE = "agent_processed_repos"
 # ---------------------------------------------------------------------------
 
 def _make_client() -> Client:
+    logger.debug("Initialising Supabase client")
     return create_client(
         settings.SUPABASE_URL,
         settings.SUPABASE_SERVICE_KEY.get(),
@@ -38,6 +41,7 @@ def get_current_week() -> int | None:
     Read current_week from the single-row site_config table.
     Returns None if the table is empty or the value is 0 / unset.
     """
+    logger.debug("Fetching current_week from site_config")
     response = (
         _client.table("site_config")
         .select("current_week")
@@ -45,9 +49,16 @@ def get_current_week() -> int | None:
         .execute()
     )
     if not response.data:
+        logger.warning("site_config returned no rows — current_week is unset")
         return None
+
     value = response.data[0].get("current_week")
-    return int(value) if value else None
+    if not value:
+        logger.warning("current_week is 0 or null in site_config")
+        return None
+
+    logger.info(f"current_week = {int(value)}")
+    return int(value)
 
 
 # ---------------------------------------------------------------------------
@@ -61,13 +72,16 @@ def save_blog_post(post: BlogPostInsert) -> str:
     Raises:
         Exception: propagates any Supabase / PostgREST error.
     """
+    logger.info(f"Saving blog post: '{post.title}'")
     response = (
         _client.table(_BLOG_POSTS_TABLE)
         .insert(post.to_supabase_dict())
         .execute()
     )
     row = response.data[0]
-    return str(row["id"])
+    post_id = str(row["id"])
+    logger.info(f"Blog post saved (id={post_id}, title='{post.title}')")
+    return post_id
 
 
 # ---------------------------------------------------------------------------
@@ -82,12 +96,15 @@ def get_processed_repo_ids() -> set[int]:
     Return the set of GitHub repo IDs that have already been processed
     (any status). Used to diff against the current week's repos.
     """
+    logger.debug("Fetching already-processed repo IDs from Supabase")
     response = (
         _client.table(_PROCESSED_REPOS_TABLE)
         .select("repo_id")
         .execute()
     )
-    return {row["repo_id"] for row in response.data}
+    ids = {row["repo_id"] for row in response.data}
+    logger.info(f"Previously processed repos: {len(ids)}")
+    return ids
 
 
 def mark_repo_processed(
@@ -110,6 +127,8 @@ def mark_repo_processed(
         blog_post_id:   UUID string of the saved blog post (status == "success").
         raw_llm_output: Raw LLM JSON dict saved for inspection (status == "failed").
     """
+    logger.debug(f"Marking repo as '{status}': '{repo_name}' (repo_id={repo_id})")
+
     row: dict = {
         "repo_id": repo_id,
         "repo_name": repo_name,
@@ -121,3 +140,6 @@ def mark_repo_processed(
     }
 
     _client.table(_PROCESSED_REPOS_TABLE).upsert(row, on_conflict="repo_id").execute()
+    logger.info(f"Repo '{repo_name}' (repo_id={repo_id}) marked as '{status}'"
+                + (f" — reason: {skip_reason}" if skip_reason else "")
+                + (f" — blog_post_id: {blog_post_id}" if blog_post_id else ""))
