@@ -1,7 +1,7 @@
 import httpx
 from agent.config.settings import GITHUB_TOKEN, GITHUB_USERNAME
 
-repos_url = f'https://api.github.com/users/{GITHUB_USERNAME}/repos'
+
 
 headers = {
     "Authorization": f"Bearer {GITHUB_TOKEN.get()}",
@@ -59,17 +59,18 @@ def get_readme_content(owner: str, repo_name: str) -> str | None:
 
     return content
 
-def data_to_send_LLM() -> list:
+def data_to_send_LLM(owner:str) -> list:
+    repos_url = f'https://api.github.com/users/{owner}/repos'
     r = fetch_from_github(url=repos_url)
     new_repos_this_week = [
         repo for repo in r.json()
-        if "2025" in repo["created_at"]
+        if "2025" in repo["created_at"] #no 2026 public repos so testng with past years data
         # if was_created_this_week(repo["created_at"])
     ]
     
     to_process_repos = []
     for repo in new_repos_this_week:
-        readme = get_readme_content(GITHUB_USERNAME, repo["name"])
+        readme = get_readme_content(owner, repo["name"])
 
         if readme is None:
             # log skip reason, mark as skipped in Supabase, continue
@@ -99,7 +100,6 @@ def manaul_repo_fetch(repo_name:str, owner:str)->dict:
         }
     return process_data
 
-# Quick sanity check — run this and confirm the dates look right
 if __name__ == "__main__":
     data = data_to_send_LLM()
     repo_names = [repo["name"] for repo in data]

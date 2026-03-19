@@ -66,9 +66,10 @@ SUPABASE_SERVICE_KEY: SecretStr = _require_secret("SUPABASE_SERVICE_KEY")
 # ---------------------------------------------------------------------------
 # LinkedIn (optional — only required if LinkedIn posting is enabled)
 # ---------------------------------------------------------------------------
+LINKEDIN_CLIENT_ID = SecretStr(os.environ["LINKEDIN_CLIENT_ID"])
+LINKEDIN_CLIENT_SECRET = SecretStr(os.environ["LINKEDIN_CLIENT_SECRET"])
 LINKEDIN_ACCESS_TOKEN: SecretStr | None = _optional_secret("LINKEDIN_ACCESS_TOKEN")
 LINKEDIN_PERSON_URN: str | None = os.getenv("LINKEDIN_PERSON_URN")
-# LINKEDIN_TOKEN_EXPIRY: int = int(os.getenv("LINKEDIN_TOKEN_EXPIRY", "0"))
 
 # ---------------------------------------------------------------------------
 # Runtime
