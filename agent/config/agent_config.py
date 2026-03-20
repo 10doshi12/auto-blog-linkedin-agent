@@ -14,7 +14,7 @@ class LLMConfig(BaseModel):
 class GitHubConfig(BaseModel):
     username: str = GITHUB_USERNAME
     max_repos_per_run: int = 5
-    max_readme_length: int = 8000
+    max_readme_length: int = 20000
     skip_forked_repos: bool = True
 
     model_config = {"frozen": True}
