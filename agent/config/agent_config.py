@@ -3,9 +3,9 @@ from agent.config.settings import GITHUB_USERNAME
 
 
 class LLMConfig(BaseModel):
-    primary_model: str = "mistralai/mistral-7b-instruct"
-    fallback_model: str = "mistralai/mistral-small-3.1-24b-instruct:free"
-    max_tokens: int = 2048
+    primary_model: str = "openai/gpt-oss-20b"
+    fallback_model: str = "meta-llama/llama-3.1-8b-instruct"
+    max_tokens: int = 8192
     temperature: float = 0.7
 
     model_config = {"frozen": True}

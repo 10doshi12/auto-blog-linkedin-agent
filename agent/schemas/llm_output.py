@@ -37,7 +37,7 @@ class LLMOutput(BaseModel):
     metric: str = Field(
         ...,
         min_length=5,
-        max_length=100,
+        max_length=1000,
         description="One-line real-world performance or impact metric, e.g. 'Reduces deployment time by ~60%'.",
     )
     tags: list[str] = Field(

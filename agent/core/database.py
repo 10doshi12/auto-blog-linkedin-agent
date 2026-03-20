@@ -122,8 +122,9 @@ def get_processed_repo_ids() -> set[int]:
     """
     logger.debug("Fetching processed repo IDs from agent_processed_repos")
     response = (
-        _client.table(_PROCESSED_REPOS_TABLE)
+        _client.table("agent_processed_repos")
         .select("repo_id")
+        .in_("status", ["success", "skipped"])
         .execute()
     )
     ids = {row["repo_id"] for row in response.data}

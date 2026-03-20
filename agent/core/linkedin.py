@@ -30,7 +30,7 @@ def post_to_linkedin(text: str) -> str:
     person_urn = LINKEDIN_PERSON_URN
 
     payload = {
-        "author": f"urn:li:person:{person_urn}",
+        "author": person_urn,
         "lifecycleState": "PUBLISHED",
         "specificContent": {
             "com.linkedin.ugc.ShareContent": {

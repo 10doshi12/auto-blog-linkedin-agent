@@ -1,4 +1,5 @@
 import json
+import re
 import httpx
 from agent.config.settings import OPENROUTER_API_KEY
 from agent.config.agent_config import config
@@ -16,7 +17,34 @@ HEADERS = {
     "X-OpenRouter-Title": "auto-blog-agent",
     "Content-Type": "application/json",
 }
+def _sanitize_raw(raw: str) -> str:
+    # Remove markdown fences
+    raw = re.sub(r"^```json\s*", "", raw.strip())
+    raw = re.sub(r"```\s*$", "", raw.strip())
 
+    # Use a JSON string-aware replacer to escape control chars inside values
+    result = []
+    in_string = False
+    escaped = False
+
+    for char in raw:
+        if escaped:
+            result.append(char)
+            escaped = False
+        elif char == "\\":
+            result.append(char)
+            escaped = True
+        elif char == '"':
+            in_string = not in_string
+            result.append(char)
+        elif in_string and ord(char) < 0x20:
+            # Escape control characters only when inside a string value
+            replacements = {"\n": "\\n", "\r": "\\r", "\t": "\\t"}
+            result.append(replacements.get(char, ""))
+        else:
+            result.append(char)
+
+    return "".join(result)
 
 def _call_model(readme: str, model: str) -> LLMOutput:
     system_prompt, user_prompt = build_prompt(readme)
@@ -36,7 +64,7 @@ def _call_model(readme: str, model: str) -> LLMOutput:
 
     raw_content = response.json()["choices"][0]["message"]["content"]
 
-    parsed = json.loads(raw_content)
+    parsed = json.loads(_sanitize_raw(raw_content))
     return LLMOutput.model_validate(parsed)
 
 
