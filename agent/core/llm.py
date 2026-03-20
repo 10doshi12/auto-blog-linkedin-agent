@@ -1,17 +1,17 @@
 import json
 import httpx
-from agent.config.settings import settings
+from agent.config.settings import OPENROUTER_API_KEY
 from agent.config.agent_config import config
 from agent.schemas.llm_output import LLMOutput
 from agent.prompts.templates import build_prompt
-from agent.utils.logger import logger
+from agent.utils.logger import get_logger
 from pydantic import ValidationError
-
+logger = get_logger(__name__)
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 HEADERS = {
-    "Authorization": f"Bearer {settings.OPENROUTER_API_KEY.get()}",
+    "Authorization": f"Bearer {OPENROUTER_API_KEY.get()}",
     "HTTP-Referer": "https://github.com/yourusername/auto-blog-agent",
     "X-OpenRouter-Title": "auto-blog-agent",
     "Content-Type": "application/json",

@@ -1,12 +1,13 @@
 from pydantic import BaseModel
-from agent.config.settings import GITHUB_USERNAME,OPENROUTER_API_KEY
+from agent.config.settings import GITHUB_USERNAME
+
 
 class LLMConfig(BaseModel):
     primary_model: str = "mistralai/mistral-7b-instruct"
     fallback_model: str = "mistralai/mistral-small-3.1-24b-instruct:free"
     max_tokens: int = 2048
     temperature: float = 0.7
-    apiKey : str = OPENROUTER_API_KEY
+
     model_config = {"frozen": True}
 
 
@@ -30,7 +31,6 @@ class ContentConfig(BaseModel):
 
 class AgentBehaviourConfig(BaseModel):
     skip_repos_without_readme: bool = True
-    dry_run: bool = False
 
     model_config = {"frozen": True}
 

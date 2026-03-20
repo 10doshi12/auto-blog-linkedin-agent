@@ -1,3 +1,4 @@
+from typing import Literal
 from pydantic import BaseModel, Field
 
 
@@ -22,7 +23,22 @@ class LLMOutput(BaseModel):
     content: str = Field(
         ...,
         min_length=100,
-        description="Full blog post body in Markdown.",
+        description="Full blog post body in Markdown — accessible, non-technical, story-driven.",
+    )
+    technical_content: str = Field(
+        ...,
+        min_length=100,
+        description="Technical deep-dive in Markdown — architecture, stack, implementation details.",
+    )
+    category: Literal["ai-ml", "full-stack"] = Field(
+        ...,
+        description="Project category inferred from the README. Must be exactly 'ai-ml' or 'full-stack'.",
+    )
+    metric: str = Field(
+        ...,
+        min_length=5,
+        max_length=100,
+        description="One-line real-world performance or impact metric, e.g. 'Reduces deployment time by ~60%'.",
     )
     tags: list[str] = Field(
         ...,

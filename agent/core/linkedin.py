@@ -1,6 +1,6 @@
 import httpx
 
-from agent.config.settings import settings
+from agent.config.settings import LINKEDIN_ACCESS_TOKEN, LINKEDIN_PERSON_URN
 from agent.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -8,7 +8,7 @@ logger = get_logger(__name__)
 _UGCPOSTS_URL = "https://api.linkedin.com/v2/ugcPosts"
 
 _HEADERS = {
-    "Authorization": f"Bearer {settings.LINKEDIN_ACCESS_TOKEN.get()}",
+    "Authorization": f"Bearer {LINKEDIN_ACCESS_TOKEN.get()}",
     "Content-Type": "application/json",
     "X-Restli-Protocol-Version": "2.0.0",
 }
@@ -27,7 +27,7 @@ def post_to_linkedin(text: str) -> str:
     Raises:
         httpx.HTTPStatusError: if LinkedIn returns a non-2xx response.
     """
-    person_urn = settings.LINKEDIN_PERSON_URN
+    person_urn = LINKEDIN_PERSON_URN
 
     payload = {
         "author": f"urn:li:person:{person_urn}",

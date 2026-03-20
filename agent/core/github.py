@@ -34,10 +34,9 @@ def get_current_week_range_ist() -> tuple[datetime, datetime]:
     return week_start, week_end
 
 
-def was_created_this_week(created_at: str) -> bool:
+def _was_created_in_range(created_at: str, week_start: datetime, week_end: datetime) -> bool:
     created_utc = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
     created_ist = created_utc.astimezone(IST)
-    week_start, week_end = get_current_week_range_ist()
     return week_start <= created_ist <= week_end
 
 
@@ -68,9 +67,11 @@ def data_to_send_LLM(owner: str) -> list:
     all_repos = r.json()
     logger.info(f"Total public repos fetched: {len(all_repos)}")
 
+    week_start, week_end = get_current_week_range_ist()
+
     new_repos_this_week = [
         repo for repo in all_repos
-        if was_created_this_week(repo["created_at"])
+        if _was_created_in_range(repo["created_at"], week_start, week_end)
     ]
     logger.info(f"Repos created this IST week: {len(new_repos_this_week)}")
 
