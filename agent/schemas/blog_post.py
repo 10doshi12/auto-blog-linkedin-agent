@@ -80,8 +80,8 @@ class BlogPostInsert(BaseModel):
             tags=[t.lower().strip() for t in tags],
             reading_time_minutes=_reading_time(content),
             week_number=week_number,
-            published=False,
-            published_at=None,
+            published=True,
+            published_at=datetime.now(timezone.utc).isoformat(),
         )
 
     def to_supabase_dict(self) -> dict:
