@@ -377,7 +377,8 @@ name: Auto Blog Agent
 
 on:
   schedule:
-    - cron: '30 1 * * 1'   # Every Monday at 07:00 IST (01:30 UTC)
+    - cron: '30 1 * * 3'   # Every Wednesday at 07:00 IST (01:30 UTC)
+    - cron: '30 1 * * 0'   # Every Sunday at 07:00 IST (01:30 UTC)
   workflow_dispatch:         # Manual trigger available
 
 jobs:
@@ -394,8 +395,8 @@ jobs:
 
       - name: Run agent
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN_PAT }}
-          GITHUB_USERNAME: ${{ secrets.GITHUB_USERNAME }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_PAT }}
+          GITHUB_USERNAME: ${{ secrets.GH_USERNAME }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
