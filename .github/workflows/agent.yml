@@ -20,8 +20,8 @@ jobs:
 
       - name: Run agent
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN_PAT }}
-          GITHUB_USERNAME: ${{ secrets.GITHUB_USERNAME }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_PAT }}
+          GITHUB_USERNAME: ${{ secrets.GH_USERNAME }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
