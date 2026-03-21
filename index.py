@@ -76,7 +76,7 @@ async def _process_repo(repo_data: dict, week_number: int | None) -> None:
             linkedin_failed_content = llm_output.linkedin_post
         else:
             try:
-                post_urn = await asyncio.to_thread(post_to_linkedin, llm_output.linkedin_post)
+                post_urn = await asyncio.to_thread(post_to_linkedin, llm_output.linkedin_post, github_url)
                 logger.info(f"[{repo_name}] LinkedIn post published (urn={post_urn})")
             except Exception as linkedin_err:
                 logger.error(
