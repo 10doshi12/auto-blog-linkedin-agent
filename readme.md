@@ -417,9 +417,9 @@ All constants live in `agent/config/agent_config.py` as frozen Pydantic models. 
 
 | Key | Default | Description |
 |---|---|---|
-| `config.llm.primary_model` | `mistralai/mistral-7b-instruct` | First-choice model |
-| `config.llm.fallback_model` | `mistralai/mistral-small-3.1-24b-instruct:free` | Used if primary fails JSON/validation |
-| `config.llm.max_tokens` | `2048` | Max output tokens per call |
+| `config.llm.primary_model` | `openai/gpt-oss-20b` | First-choice model |
+| `config.llm.fallback_model` | `meta-llama/llama-3.1-8b-instruct` | Used if primary fails JSON/validation |
+| `config.llm.max_tokens` | `8192` | Max output tokens per call |
 | `config.llm.temperature` | `0.7` | Generation creativity |
 | `config.github.max_repos_per_run` | `5` | How many repos to process per run |
 | `config.github.max_readme_length` | `20000` | README chars sent to LLM (truncated beyond this) |
@@ -428,6 +428,7 @@ All constants live in `agent/config/agent_config.py` as frozen Pydantic models. 
 | `config.content.linkedin_post_max_length` | `2800` | LinkedIn character budget |
 | `config.content.hashtag_count` | `5` | Hashtags appended to LinkedIn posts |
 | `config.behaviour.skip_repos_without_readme` | `True` | Skips repos with no README |
+| `config.behaviour.disable_linkedin_posting` | `False` | Skips posting to LinkedIn if True (useful for testing outputs) |
 
 ---
 

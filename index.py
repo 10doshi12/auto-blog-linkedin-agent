@@ -1,5 +1,6 @@
 import asyncio
 
+from agent.config.agent_config import config
 from agent.config.settings import DRY_RUN, GITHUB_USERNAME
 from agent.core.database import (
     get_current_week,
@@ -66,6 +67,13 @@ async def _process_repo(repo_data: dict, week_number: int | None) -> None:
 
         if DRY_RUN:
             logger.info(f"[{repo_name}] DRY RUN — skipping LinkedIn post")
+        elif config.behaviour.disable_linkedin_posting:
+            logger.info(f"[{repo_name}] CONFIG — skipping LinkedIn post (disable_linkedin_posting is True)")
+            # Treat as "failed" to post, but without actual exception, or we could leave it as success
+            # and record the content in raw_llm_output so it isn't lost. 
+            # Actually we shouldn't mark it as failed unless it really failed. 
+            # We'll just park the content in raw_llm_output for reference or manual posting.
+            linkedin_failed_content = llm_output.linkedin_post
         else:
             try:
                 post_urn = await asyncio.to_thread(post_to_linkedin, llm_output.linkedin_post)

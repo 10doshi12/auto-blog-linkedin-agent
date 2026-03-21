@@ -31,6 +31,7 @@ class ContentConfig(BaseModel):
 
 class AgentBehaviourConfig(BaseModel):
     skip_repos_without_readme: bool = True
+    disable_linkedin_posting: bool = False
 
     model_config = {"frozen": True}
 
