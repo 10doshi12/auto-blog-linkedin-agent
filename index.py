@@ -10,7 +10,7 @@ from agent.core.database import (
     save_project,
 )
 from agent.core.github import data_to_send_LLM
-from agent.core.linkedin import post_to_linkedin
+from agent.core.linkedin import LinkedInConfigError, post_to_linkedin
 from agent.core.llm import check_openrouter_connection, generate_blog_content
 from agent.schemas.blog_post import BlogPostInsert
 from agent.schemas.project import ProjectInsert
@@ -24,6 +24,7 @@ async def _process_repo(repo_data: dict, week_number: int | None) -> None:
     repo_name: str = repo_data["name"]
     readme: str = repo_data["readme"]
     github_url: str = repo_data["repo_obj"]["html_url"]
+    llm_output = None
 
     logger.info(f"[{repo_name}] Starting processing (repo_id={repo_id})")
 
@@ -63,26 +64,31 @@ async def _process_repo(repo_data: dict, week_number: int | None) -> None:
             logger.info(f"[{repo_name}] Project saved (id={project_id})")
 
         # --- Post to LinkedIn (best-effort) ---
-        linkedin_failed_content: str | None = None
+        linkedin_status = "published"
 
         if DRY_RUN:
             logger.info(f"[{repo_name}] DRY RUN — skipping LinkedIn post")
+            linkedin_status = "dry_run"
         elif config.behaviour.disable_linkedin_posting:
             logger.info(f"[{repo_name}] CONFIG — skipping LinkedIn post (disable_linkedin_posting is True)")
-            # Treat as "failed" to post, but without actual exception, or we could leave it as success
-            # and record the content in raw_llm_output so it isn't lost. 
-            # Actually we shouldn't mark it as failed unless it really failed. 
-            # We'll just park the content in raw_llm_output for reference or manual posting.
-            linkedin_failed_content = llm_output.linkedin_post
+            linkedin_status = "disabled"
         else:
             try:
                 post_urn = await asyncio.to_thread(post_to_linkedin, llm_output.linkedin_post, github_url)
                 logger.info(f"[{repo_name}] LinkedIn post published (urn={post_urn})")
+            except LinkedInConfigError as linkedin_config_err:
+                logger.warning(
+                    f"[{repo_name}] LinkedIn config missing, skipping publish: {linkedin_config_err}"
+                )
+                linkedin_status = "missing_config"
             except Exception as linkedin_err:
                 logger.error(
                     f"[{repo_name}] LinkedIn posting failed (blog post still saved): {linkedin_err}"
                 )
-                linkedin_failed_content = llm_output.linkedin_post
+                linkedin_status = "publish_failed"
+
+        raw_llm_output = llm_output.model_dump()
+        raw_llm_output["linkedin_status"] = linkedin_status
 
         # --- Mark as success ---
         await asyncio.to_thread(
@@ -91,18 +97,22 @@ async def _process_repo(repo_data: dict, week_number: int | None) -> None:
             repo_name=repo_name,
             status="success",
             blog_post_id=post_id if post_id != "dry-run" else None,
-            raw_llm_output={"linkedin_post": linkedin_failed_content} if linkedin_failed_content else None,
+            raw_llm_output=raw_llm_output,
         )
         logger.info(f"[{repo_name}] Marked as success")
 
     except Exception as e:
         logger.error(f"[{repo_name}] Processing failed: {e}", exc_info=True)
+        failed_raw_llm_output = None
+        if llm_output is not None:
+            failed_raw_llm_output = llm_output.model_dump()
+            failed_raw_llm_output["linkedin_status"] = "not_attempted"
         await asyncio.to_thread(
             mark_repo_processed,
             repo_id=repo_id,
             repo_name=repo_name,
             status="failed",
-            raw_llm_output=None,
+            raw_llm_output=failed_raw_llm_output,
         )
 
 

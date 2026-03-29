@@ -150,8 +150,8 @@ def mark_repo_processed(
         status:         "success" | "skipped" | "failed".
         skip_reason:    Populated when status == "skipped".
         blog_post_id:   UUID string of the saved blog post (status == "success").
-        raw_llm_output: Raw LLM JSON dict saved for inspection (status == "failed")
-                        or failed LinkedIn post content (status == "success").
+        raw_llm_output: Validated LLM JSON dict saved for inspection on every
+                        processed repo, including LinkedIn status metadata.
     """
     logger.debug(f"Marking repo as '{status}': '{repo_name}' (repo_id={repo_id})")
 

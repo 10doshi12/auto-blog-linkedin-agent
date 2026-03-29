@@ -71,7 +71,8 @@ def data_to_send_LLM(owner: str) -> list:
 
     new_repos_this_week = [
         repo for repo in all_repos
-        if _was_created_in_range(repo["created_at"], week_start, week_end)
+        # if _was_created_in_range(repo["created_at"], week_start, week_end)
+        if repo["name"] == "Dynamic-Web-Scraper-Python" or repo['name'] == "neogen" #testing with single repo to make sure the changes work
     ]
     logger.info(f"Repos created this IST week: {len(new_repos_this_week)}")
 

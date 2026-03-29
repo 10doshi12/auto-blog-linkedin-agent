@@ -24,7 +24,7 @@ Every week, `auto-blog-linkedin-agent` runs on a GitHub Actions cron and does th
 2. **Reads** each new repo's README to understand what got built
 3. **Calls an LLM** (via OpenRouter) to generate two pieces of content per repo: a story-driven blog post for general readers and a technical deep-dive for developers
 4. **Saves** the blog post to Supabase (`posts` table) and the project entry to the `projects` table
-5. **Posts to LinkedIn** using the ugcPosts API
+5. **Posts to LinkedIn** using the ugcPosts API when LinkedIn credentials are configured
 6. **Records** every processed repo in an audit table so it doesn't reprocess anything across runs
 
 Every week's project gets written up and published. You don't have to remember.
@@ -204,12 +204,15 @@ status          text        NOT NULL    -- "success" | "skipped" | "failed"
 skip_reason     text        NULLABLE
 blog_post_id    uuid        NULLABLE, FK -> posts(id) ON DELETE SET NULL
 processed_at    timestamptz NOT NULL, default now()
-raw_llm_output  jsonb       NULLABLE    -- stores failed LinkedIn post content
+raw_llm_output  jsonb       NULLABLE    -- stores generated LLM output plus LinkedIn status
 ```
 
-> **LinkedIn failure recovery:** If LinkedIn posting fails but the blog was saved, `status` stays `"success"` and the post content lands in `raw_llm_output` as `{"linkedin_post": "..."}`. Recover it with:
+> **LLM output is always retained:** Every processed repo stores the validated LLM response in `raw_llm_output`. The same payload also carries a `linkedin_status` field so you can tell whether the post was published, skipped, or failed. Recover it with:
 > ```sql
-> SELECT repo_name, raw_llm_output->>'linkedin_post'
+> SELECT
+>   repo_name,
+>   raw_llm_output->>'linkedin_status',
+>   raw_llm_output->>'linkedin_post'
 > FROM agent_processed_repos
 > WHERE status = 'success' AND raw_llm_output IS NOT NULL;
 > ```
@@ -227,7 +230,7 @@ Before you start, you'll need:
 - A [Supabase](https://supabase.com) project with the schema above applied
 - An [OpenRouter](https://openrouter.ai) API key
 - A GitHub [fine-grained PAT](https://github.com/settings/tokens) with `repo:read` scope
-- A LinkedIn developer app with `ugcPosts` write access and a long-lived OAuth token
+- Optional: a LinkedIn access token with `ugcPosts` write access plus `LINKEDIN_PERSON_URN` if you want automatic posting
 
 ---
 
@@ -320,9 +323,7 @@ OPENROUTER_API_KEY=sk-or-...
 SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_SERVICE_KEY=eyJ...
 
-# LinkedIn
-LINKEDIN_CLIENT_ID=...
-LINKEDIN_CLIENT_SECRET=...
+# LinkedIn (optional, only for auto-posting)
 LINKEDIN_ACCESS_TOKEN=...
 LINKEDIN_PERSON_URN=urn:li:person:XXXXXXX
 
@@ -333,6 +334,8 @@ DRY_RUN=false
 ```
 
 > **On `SecretStr`:** Sensitive values are wrapped in `SecretStr`. Call `.get()` to access the raw string in code. Printing it directly returns `**********`, so secrets don't leak into logs accidentally.
+
+If `LINKEDIN_ACCESS_TOKEN` or `LINKEDIN_PERSON_URN` is missing, the agent still runs. It skips LinkedIn publishing, but still stores the full generated LLM output in `agent_processed_repos.raw_llm_output` for recovery or inspection.
 
 ---
 
@@ -356,7 +359,7 @@ INFO  | agent.core.github   | Repos created this IST week: 0
 INFO  | __main__            | No new repos found this week, nothing to process
 ```
 
-If repos are found, it'll proceed to generate content for each. In dry run mode it stops before writing anything.
+If repos are found, it'll proceed to generate content for each. In dry run mode it skips Supabase content inserts and LinkedIn publishing, but it still writes the processed repo audit row with the generated LLM output.
 
 **Real run:**
 
@@ -400,8 +403,6 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          LINKEDIN_CLIENT_ID: ${{ secrets.LINKEDIN_CLIENT_ID }}
-          LINKEDIN_CLIENT_SECRET: ${{ secrets.LINKEDIN_CLIENT_SECRET }}
           LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
           LINKEDIN_PERSON_URN: ${{ secrets.LINKEDIN_PERSON_URN }}
           ENVIRONMENT: production
@@ -435,12 +436,12 @@ All constants live in `agent/config/agent_config.py` as frozen Pydantic models. 
 
 ## Known Gotchas
 
-**`agent_processed_repos` writes even in dry run mode.** Rows are committed regardless of `DRY_RUN`. Before switching to a real run, clear it:
+**`agent_processed_repos` writes even in dry run mode.** Rows are committed regardless of `DRY_RUN`, and each row now includes the generated LLM output. Before switching to a real run, clear it:
 ```sql
 DELETE FROM agent_processed_repos;
 ```
 
-**LinkedIn token expiry is silent.** The access token is long-lived but it does expire. When it does, LinkedIn calls fail without throwing a visible error, status stays `"success"`, and the post content gets parked in `raw_llm_output`. Keep an eye on rows where `raw_llm_output IS NOT NULL`.
+**LinkedIn is optional, but every LLM response is still recorded.** If `disable_linkedin_posting=True`, `LINKEDIN_ACCESS_TOKEN` is missing, `LINKEDIN_PERSON_URN` is missing, the publish call fails, or the run is a dry run, the generated content still lands in `raw_llm_output` with a `linkedin_status` value. Keep an eye on rows where `raw_llm_output IS NOT NULL`.
 
 **IST week boundary is computed once per run.** `data_to_send_LLM()` calculates the week range upfront and passes it to all repo checks. This matters because computing it per-repo would produce redundant log lines and inconsistent results if a run crosses midnight.
 
@@ -460,6 +461,17 @@ git commit -m "feat: your feature description"
 git push origin feat/your-feature
 # Open a pull request
 ```
+
+
+# NEXT STEPS
+- Resolve Major Security Flaws
+- Add more robust error handling and logging around LinkedIn API calls, including token refresh logic
+- Automated LinkedIn refresh token handling: Implement a mechanism to automatically refresh LinkedIn OAuth tokens when they expire, ensuring uninterrupted posting without manual intervention.
+- Implement a retry mechanism for transient failures (network issues, rate limits) with exponential backoff
+- Add unit tests for core functions (LLM output validation, GitHub data fetching, DB operations) using mocks to simulate external dependencies
+- Extend the LLM prompt to include more specific instructions for generating LinkedIn posts that comply with platform guidelines and best practices
+- Create separate functions and workflows for LinkedIn post generation and posting so that it is not only limited to blog content generation but can also be generalized for any post on LinkedIn.
+- Add functionality to handle updates to existing repos (e.g., if a README changes, update the corresponding blog post)
 
 ---
 

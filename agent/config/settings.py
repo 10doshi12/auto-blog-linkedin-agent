@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from pydantic import BaseModel
 
 load_dotenv()
 
@@ -37,10 +38,27 @@ def _require_secret(key: str) -> SecretStr:
     return SecretStr(os.environ[key])
 
 
+def _optional_value(key: str) -> str | None:
+    """Load an optional environment variable and treat blank values as missing."""
+    value = os.getenv(key)
+    if value is None:
+        return None
+
+    value = value.strip()
+    return value or None
+
+
 def _optional_secret(key: str) -> SecretStr | None:
     """Load an optional secret from the environment. Returns None if missing."""
-    value = os.getenv(key)
+    value = _optional_value(key)
     return SecretStr(value) if value else None
+
+
+class LinkedInPublishSettings(BaseModel):
+    access_token: SecretStr | None
+    person_urn: str | None
+
+    model_config = {"frozen": True, "arbitrary_types_allowed": True}
 
 
 # ---------------------------------------------------------------------------
@@ -66,10 +84,29 @@ SUPABASE_SERVICE_KEY: SecretStr = _require_secret("SUPABASE_SERVICE_KEY")
 # ---------------------------------------------------------------------------
 # LinkedIn (optional — only required if LinkedIn posting is enabled)
 # ---------------------------------------------------------------------------
-LINKEDIN_CLIENT_ID = SecretStr(os.environ["LINKEDIN_CLIENT_ID"])
-LINKEDIN_CLIENT_SECRET = SecretStr(os.environ["LINKEDIN_CLIENT_SECRET"])
-LINKEDIN_ACCESS_TOKEN: SecretStr | None = _optional_secret("LINKEDIN_ACCESS_TOKEN")
-LINKEDIN_PERSON_URN: str | None = os.getenv("LINKEDIN_PERSON_URN")
+
+
+def get_linkedin_client_id() -> SecretStr | None:
+    return _optional_secret("LINKEDIN_CLIENT_ID")
+
+
+def get_linkedin_client_secret() -> SecretStr | None:
+    return _optional_secret("LINKEDIN_CLIENT_SECRET")
+
+
+def get_linkedin_access_token() -> SecretStr | None:
+    return _optional_secret("LINKEDIN_ACCESS_TOKEN")
+
+
+def get_linkedin_person_urn() -> str | None:
+    return _optional_value("LINKEDIN_PERSON_URN")
+
+
+def get_linkedin_publish_settings() -> LinkedInPublishSettings:
+    return LinkedInPublishSettings(
+        access_token=get_linkedin_access_token(),
+        person_urn=get_linkedin_person_urn(),
+    )
 
 # ---------------------------------------------------------------------------
 # Runtime
