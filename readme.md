@@ -42,7 +42,7 @@ Every week's project gets written up and published. You don't have to remember.
 | LinkedIn | ugcPosts API (OAuth) | Official API, durable long-lived tokens |
 | GitHub API | REST with fine-grained PAT | Read-only, least-privilege access |
 | Schema validation | Pydantic v2 | Strict LLM output contracts |
-| HTTP client | `httpx` (sync) | Simple, no async complexity for API calls |
+| HTTP client | `httpx` (async + sync) | Async OpenRouter calls, sync wrappers for existing GitHub and LinkedIn code |
 | Env loading | `python-dotenv` | 12-factor config |
 | CI/CD | GitHub Actions (weekly cron) | Serverless, free, zero infra |
 
@@ -96,26 +96,24 @@ main()
  └── 4. get_processed_repo_ids()        → load already-processed repo IDs for dedup
 ```
 
-**Phase 2: Async processing** (concurrent per repo, IO-bound)
+**Phase 2: Async processing** (bounded parallelism per repo)
 
 ```
-asyncio.gather(
-  _process_repo(repo_1),  ─┐
-  _process_repo(repo_2),   ├── all repos processed concurrently
-  _process_repo(repo_3),  ─┘
-)
+worker_pool(max_concurrent_requests=2)
+  ├── _process_repo(repo_1)
+  ├── _process_repo(repo_2)
+  └── starts the next repo only when a worker frees up
 
 Per repo:
-  ├── generate_blog_content(readme)       → LLM call, validates JSON output
+  ├── generate_blog_content(readme)       → async OpenRouter call, validates JSON output
   ├── BlogPostInsert.from_llm_output()    → build blog payload
   ├── ProjectInsert.from_llm_output()     → build project payload
-  ├── save_blog_post(post)                → insert into posts table
-  ├── save_project(project)               → insert into projects table
+  ├── mark_repo_in_progress(...)          → stage audit state before long-running work
   ├── post_to_linkedin(linkedin_post)     → best-effort, isolated error handling
-  └── mark_repo_processed(...)            → always runs, success or failure
+  └── persist_repo_result(...)            → single transactional RPC for posts/projects/audit
 ```
 
-> **Why `asyncio.to_thread`?** Both `httpx` (sync client) and `supabase-py` are synchronous libraries. Rather than rewriting them, `asyncio.to_thread` pushes each call into a thread pool. The event loop stays unblocked, repos get processed concurrently, and nothing had to change in the underlying libs.
+> **Why the mixed async/sync model?** OpenRouter now uses a shared `httpx.AsyncClient` with explicit timeouts, retries, and cancellation-aware awaits so hung LLM requests do not block shutdown. Supabase still runs through the synchronous client, and the GitHub discovery layer now uses a shared `httpx.Client` with pagination, timeouts, and retries inside `asyncio.to_thread`.
 
 ### LLM output contract
 
@@ -123,23 +121,25 @@ The agent tells the LLM to return exactly this JSON, no markdown fences, no prea
 
 ```json
 {
+  "slug": "3–30 chars, lowercase kebab-case URL slug",
   "title": "10–120 chars",
   "excerpt": "40–280 chars, one or two sentence summary",
   "content": "150+ words, non-technical story-driven Markdown blog post",
   "technical_content": "150+ words, architecture/stack deep-dive Markdown",
-  "category": "ai-ml | full-stack",
+  "category": "ai-ml | fullstack | hackathon",
   "metric": "max 100 chars, one concrete real-world metric",
   "tags": ["lowercase-kebab-case", "1–8 tags"],
   "linkedin_post": "30–3000 chars, plain text, no Markdown"
 }
 ```
 
-If the LLM returns bad JSON or fails Pydantic validation, it retries with the fallback model. If both fail, the repo gets marked `"failed"` in the audit table and the run continues with the next one.
+If the LLM returns bad JSON or fails Pydantic validation, it retries with the fallback model. Transport failures (timeouts, connection errors, `408`, `429`, and `5xx`) retry on the same model before failing. If the request is interrupted after a validated LLM response exists, the repo gets marked `"cancelled"` and the payload is still retained in the audit table.
 
 ### Content routing
 
 | LLM Field | Destination |
 |---|---|
+| `slug` | `posts.slug` + `projects.slug` |
 | `title` | `posts.title` + `projects.title` |
 | `excerpt` | `posts.excerpt` + `projects.description` |
 | `content` | `posts.content` (reader-facing blog) |
@@ -157,6 +157,7 @@ If the LLM returns bad JSON or fails Pydantic validation, it retries with the fa
 
 ```sql
 id                    uuid        PK, gen_random_uuid()
+source_repo_id        bigint      UNIQUE NULLABLE
 slug                  text        NOT NULL
 title                 text        NOT NULL
 excerpt               text        NOT NULL
@@ -173,11 +174,12 @@ created_at            timestamptz NOT NULL, default now()
 
 ```sql
 id              uuid        PK, gen_random_uuid()
+source_repo_id  bigint      UNIQUE NULLABLE
 slug            text        NOT NULL
 title           text        NOT NULL
 description     text        NOT NULL
 content         text        NULLABLE
-category        text        NOT NULL    -- "ai-ml" or "full-stack"
+category        text        NOT NULL    -- "ai-ml", "fullstack", or "hackathon"
 tags            text[]      NOT NULL, default '{}'
 metric          text        NULLABLE
 github_url      text        NULLABLE
@@ -200,21 +202,23 @@ week_focus    text      -- informational only, not used by agent
 ```sql
 repo_id         bigint      PK  (GitHub's numeric repo ID)
 repo_name       text        NOT NULL
-status          text        NOT NULL    -- "success" | "skipped" | "failed"
+status          text        NOT NULL    -- "in_progress" | "success" | "skipped" | "failed" | "cancelled"
 skip_reason     text        NULLABLE
 blog_post_id    uuid        NULLABLE, FK -> posts(id) ON DELETE SET NULL
+project_id      uuid        NULLABLE, FK -> projects(id) ON DELETE SET NULL
 processed_at    timestamptz NOT NULL, default now()
 raw_llm_output  jsonb       NULLABLE    -- stores generated LLM output plus LinkedIn status
 ```
 
-> **LLM output is always retained:** Every processed repo stores the validated LLM response in `raw_llm_output`. The same payload also carries a `linkedin_status` field so you can tell whether the post was published, skipped, or failed. Recover it with:
+> **LLM output is always retained:** Every processed repo stores the validated LLM response in `raw_llm_output`. The same payload also carries a `linkedin_status` field so you can tell whether the post was published, skipped, failed, or never attempted because the run was cancelled. Recover it with:
 > ```sql
 > SELECT
 >   repo_name,
+>   status,
 >   raw_llm_output->>'linkedin_status',
 >   raw_llm_output->>'linkedin_post'
 > FROM agent_processed_repos
-> WHERE status = 'success' AND raw_llm_output IS NOT NULL;
+> WHERE raw_llm_output IS NOT NULL;
 > ```
 
 ---
@@ -246,7 +250,7 @@ uv sync
 
 ### Step 2 — Set up your Supabase schema
 
-Run this in your Supabase SQL editor:
+Run [`sql/001_atomic_repo_persistence.sql`](/Users/10doshi12/Desktop/Project%20try_except/agents/week1/sql/001_atomic_repo_persistence.sql) in your Supabase SQL editor:
 
 ```sql
 -- Blog posts
@@ -423,9 +427,22 @@ All constants live in `agent/config/agent_config.py` as frozen Pydantic models. 
 | `config.llm.fallback_model` | `meta-llama/llama-3.1-8b-instruct` | Used if primary fails JSON/validation |
 | `config.llm.max_tokens` | `8192` | Max output tokens per call |
 | `config.llm.temperature` | `0.7` | Generation creativity |
+| `config.llm.max_concurrent_requests` | `2` | Max repos allowed to run OpenRouter calls in parallel |
+| `config.llm.connect_timeout_seconds` | `10.0` | OpenRouter connect timeout |
+| `config.llm.write_timeout_seconds` | `10.0` | OpenRouter write timeout |
+| `config.llm.read_timeout_seconds` | `120.0` | OpenRouter response timeout |
+| `config.llm.pool_timeout_seconds` | `10.0` | OpenRouter connection pool timeout |
+| `config.llm.max_retries` | `2` | Same-model retries for timeout / retryable transport failures |
+| `config.llm.shutdown_grace_seconds` | `5.0` | Grace period for cancelled repos to persist audit state |
 | `config.github.max_repos_per_run` | `5` | How many repos to process per run |
 | `config.github.max_readme_length` | `20000` | README chars sent to LLM (truncated beyond this) |
 | `config.github.skip_forked_repos` | `True` | Skips forks |
+| `config.github.per_page` | `100` | GitHub page size for repo discovery |
+| `config.github.connect_timeout_seconds` | `10.0` | GitHub connection timeout |
+| `config.github.write_timeout_seconds` | `10.0` | GitHub write timeout |
+| `config.github.read_timeout_seconds` | `30.0` | GitHub response timeout |
+| `config.github.pool_timeout_seconds` | `10.0` | GitHub connection pool timeout |
+| `config.github.max_retries` | `2` | GitHub retries for timeout / retryable transport failures |
 | `config.content.blog_post_tone` | `"professional"` | Tone injected into system prompt |
 | `config.content.linkedin_post_max_length` | `2800` | LinkedIn character budget |
 | `config.content.hashtag_count` | `5` | Hashtags appended to LinkedIn posts |
@@ -443,9 +460,11 @@ DELETE FROM agent_processed_repos;
 
 **LinkedIn is optional, but every LLM response is still recorded.** If `disable_linkedin_posting=True`, `LINKEDIN_ACCESS_TOKEN` is missing, `LINKEDIN_PERSON_URN` is missing, the publish call fails, or the run is a dry run, the generated content still lands in `raw_llm_output` with a `linkedin_status` value. Keep an eye on rows where `raw_llm_output IS NOT NULL`.
 
+**`Ctrl-C` is now two-stage.** The first interrupt stops scheduling new repos, cancels in-flight OpenRouter requests, and gives cancellation handlers a short grace window to persist audit rows. A second interrupt aborts immediately.
+
 **IST week boundary is computed once per run.** `data_to_send_LLM()` calculates the week range upfront and passes it to all repo checks. This matters because computing it per-repo would produce redundant log lines and inconsistent results if a run crosses midnight.
 
-**`blog_post_id` is passed as a string.** `mark_repo_processed` receives it as `str`, but the FK column in Supabase is `uuid`. Supabase handles the cast on insert, so it's fine in practice.
+**Apply the SQL migration before a live run.** The new atomic persistence path depends on the `persist_repo_result(...)` SQL function and the `source_repo_id` / `project_id` schema changes in [`sql/001_atomic_repo_persistence.sql`](/Users/10doshi12/Desktop/Project%20try_except/agents/week1/sql/001_atomic_repo_persistence.sql).
 
 ---
 

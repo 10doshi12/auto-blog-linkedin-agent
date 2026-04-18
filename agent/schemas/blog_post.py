@@ -7,13 +7,19 @@ from pydantic import BaseModel, Field
 _WORDS_PER_MINUTE = 200
 
 
-def _slugify(title: str) -> str:
-    """Convert a title to a URL-safe slug."""
-    slug = title.lower().strip()
+def _slugify(value: str, *, max_length: int | None = None) -> str:
+    """Convert text to a URL-safe slug."""
+    slug = value.lower().strip()
     slug = re.sub(r"[^\w\s-]", "", slug)       # strip non-word chars
     slug = re.sub(r"[\s_]+", "-", slug)         # spaces/underscores → hyphens
     slug = re.sub(r"-{2,}", "-", slug)          # collapse multiple hyphens
-    return slug.strip("-")
+    slug = slug.strip("-")
+
+    if max_length is not None:
+        slug = slug[:max_length].strip("-")
+        slug = re.sub(r"-{2,}", "-", slug)
+
+    return slug
 
 
 def _reading_time(content: str) -> int:
@@ -30,6 +36,7 @@ class BlogPost(BaseModel):
     """
 
     id: uuid.UUID
+    source_repo_id: int | None = None
     slug: str
     title: str
     excerpt: str
@@ -48,6 +55,7 @@ class BlogPostInsert(BaseModel):
     Omits id and created_at — both are set by DB defaults.
     """
 
+    source_repo_id: int
     slug: str
     title: str
     excerpt: str
@@ -61,6 +69,8 @@ class BlogPostInsert(BaseModel):
     @classmethod
     def from_llm_output(
         cls,
+        source_repo_id: int,
+        slug: str,
         title: str,
         excerpt: str,
         content: str,
@@ -70,10 +80,11 @@ class BlogPostInsert(BaseModel):
         """
         Construct a BlogPostInsert from raw LLM-generated fields.
         week_number should be passed in from site_config.current_week in Supabase.
-        Slug and reading_time_minutes are derived automatically.
+        reading_time_minutes is derived automatically.
         """
         return cls(
-            slug=_slugify(title),
+            source_repo_id=source_repo_id,
+            slug=_slugify(slug, max_length=30),
             title=title,
             excerpt=excerpt,
             content=content,

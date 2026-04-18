@@ -10,13 +10,14 @@ You are a developer writing about your own projects. Not a content marketer. Not
 Read the GitHub README and produce structured content for a blog post and project showcase.
 
 Respond with ONLY a valid JSON object. No preamble, no explanation, no markdown fences, no backticks.
-Exactly these eight keys:
+Exactly these nine keys:
 
+  "slug"              — string, max 30 chars. Lowercase kebab-case URL slug.
   "title"             — string, 10–120 chars. Specific and direct. No hype.
   "excerpt"           — string, 40–280 chars. One or two sentences. What it does and why it matters.
   "content"           — string. Markdown blog post, 150+ words. Non-technical, story-driven. Written for a general developer audience.
   "technical_content" — string. Markdown deep-dive, 150+ words. Architecture, stack, key decisions, trade-offs.
-  "category"          — string. Exactly "ai-ml" or "full-stack".
+  "category"          — string. Exactly "ai-ml", "fullstack", or "hackathon".
   "metric"            — string, max 100 chars. One concrete real-world metric.
   "tags"              — array of strings. Lowercase kebab-case. 1–8 tags.
   "linkedin_post"     — string. Plain text only. No Markdown. Ready to publish.
@@ -67,6 +68,7 @@ def build_user_prompt(readme: str) -> str:
 Generate a blog post, technical project description, and LinkedIn post for the GitHub repository described by the README below.
 
 Requirements:
+- slug: lowercase kebab-case, maximum 30 characters, short enough for a database URL field
 - Blog post tone: {config.content.blog_post_tone}
 - LinkedIn post: maximum {config.content.linkedin_post_max_length} characters. {hashtag_instruction}
 - tags: reflect the actual tech stack and domain of the project (e.g. "python", "open-source", "llm", "automation")

@@ -1,6 +1,7 @@
 import httpx
 from typing import Any
 
+from agent.config.agent_config import config
 from agent.config.settings import get_linkedin_publish_settings
 from agent.utils.logger import get_logger
 
@@ -39,6 +40,18 @@ def _get_publish_context() -> tuple[str, dict[str, str]]:
     return settings.person_urn, headers
 
 
+def _build_post_text(text: str, github_url: str | None = None) -> str:
+    if github_url:
+        suffix = f"\n\nGitHub Repo: {github_url}"
+        max_length = config.content.linkedin_post_max_length
+        allowed_text_length = max_length - len(suffix)
+        if allowed_text_length < 1:
+            raise ValueError("LinkedIn post max length is too small to include the GitHub URL suffix")
+        text = f"{text[:allowed_text_length].rstrip()}{suffix}"
+
+    return text
+
+
 def post_to_linkedin(text: str, github_url: str | None = None) -> str:
     """
     Publish a text/link post to the configured LinkedIn personal profile.
@@ -54,9 +67,7 @@ def post_to_linkedin(text: str, github_url: str | None = None) -> str:
         httpx.HTTPStatusError: if LinkedIn returns a non-2xx response.
     """
     person_urn, headers = _get_publish_context()
-
-    if github_url:
-        text = f"{text}\n\nGitHub Repo: {github_url}"
+    text = _build_post_text(text, github_url)
 
     share_content: dict[str, Any] = {
         "shareCommentary": {

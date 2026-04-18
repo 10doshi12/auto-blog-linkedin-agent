@@ -2,7 +2,7 @@ import importlib
 import os
 import sys
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 
 class ImportWithoutLinkedInTests(unittest.TestCase):
@@ -35,7 +35,7 @@ class ImportWithoutLinkedInTests(unittest.TestCase):
                     with patch("supabase.create_client", return_value=Mock()):
                         index_module = importlib.import_module("index")
 
-            with patch.object(index_module, "check_openrouter_connection", return_value=False):
+            with patch.object(index_module, "check_openrouter_connection", AsyncMock(return_value=False)):
                 index_module.main()
         finally:
             for name in module_names:

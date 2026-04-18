@@ -7,6 +7,13 @@ class LLMConfig(BaseModel):
     fallback_model: str = "meta-llama/llama-3.1-8b-instruct"
     max_tokens: int = 8192
     temperature: float = 0.7
+    max_concurrent_requests: int = 2
+    connect_timeout_seconds: float = 10.0
+    write_timeout_seconds: float = 10.0
+    read_timeout_seconds: float = 120.0
+    pool_timeout_seconds: float = 10.0
+    max_retries: int = 2
+    shutdown_grace_seconds: float = 5.0
 
     model_config = {"frozen": True}
 
@@ -16,6 +23,12 @@ class GitHubConfig(BaseModel):
     max_repos_per_run: int = 5
     max_readme_length: int = 20000
     skip_forked_repos: bool = True
+    per_page: int = 100
+    connect_timeout_seconds: float = 10.0
+    write_timeout_seconds: float = 10.0
+    read_timeout_seconds: float = 30.0
+    pool_timeout_seconds: float = 10.0
+    max_retries: int = 2
 
     model_config = {"frozen": True}
 
@@ -31,7 +44,7 @@ class ContentConfig(BaseModel):
 
 class AgentBehaviourConfig(BaseModel):
     skip_repos_without_readme: bool = True
-    disable_linkedin_posting: bool = False
+    disable_linkedin_posting: bool = True
 
     model_config = {"frozen": True}
 
